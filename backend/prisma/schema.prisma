@@ -1,0 +1,343 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------
+// ENUMS
+// ----------------------------------------------------
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum RegistrationType {
+  DIRECT
+  SURVEYOR
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum DocType {
+  PROFILE_PHOTO
+  QUALIFICATION
+  IDENTITY_PROOF
+  RATION_CARD
+  VOTER_ID
+}
+
+// ----------------------------------------------------
+// MEDIA STORAGE TABLE
+// ----------------------------------------------------
+model Media {
+  id        Int      @id @default(autoincrement()) @map("id")
+  guid      String   @unique @default(uuid()) @map("guid")
+  fileName  String   @map("file_name")
+  fileType  String?  @map("file_type")
+  filePath  String   @map("file_path")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  documents BeneficiaryDocument[]
+
+  @@map("media")
+}
+
+// ----------------------------------------------------
+// MASTER TABLES (LOCATION MASTERS USE AUTO-INCREMENT INTEGER IDs)
+// ----------------------------------------------------
+model MasterState {
+  id        Int      @id @default(autoincrement()) @map("id")
+  stateCode String   @unique @map("state_code")
+  stateName String   @map("state_name")
+  isActive  Boolean  @default(true) @map("is_active")
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  districts     MasterDistrict[]
+  addresses     BeneficiaryAddress[]
+  userLocations UserLocation[]
+
+  @@map("master_states")
+}
+
+model MasterDistrict {
+  id           Int         @id @default(autoincrement()) @map("id")
+  stateId      Int         @map("state_id")
+  state        MasterState @relation(fields: [stateId], references: [id], onDelete: Cascade)
+  districtCode String      @unique @map("district_code")
+  districtName String      @map("district_name")
+  isActive     Boolean     @default(true) @map("is_active")
+  isDeleted    Boolean     @default(false) @map("is_deleted")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  blocks        MasterBlock[]
+  addresses     BeneficiaryAddress[]
+  userLocations UserLocation[]
+
+  @@map("master_districts")
+}
+
+model MasterBlock {
+  id         Int            @id @default(autoincrement()) @map("id")
+  districtId Int            @map("district_id")
+  district   MasterDistrict @relation(fields: [districtId], references: [id], onDelete: Cascade)
+  blockCode  String         @unique @map("block_code")
+  blockName  String         @map("block_name")
+  isActive   Boolean        @default(true) @map("is_active")
+  isDeleted  Boolean        @default(false) @map("is_deleted")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  addresses     BeneficiaryAddress[]
+  userLocations UserLocation[]
+
+  @@map("master_blocks")
+}
+
+model MasterRole {
+  id          String   @id @default(uuid()) @map("id")
+  roleCode    String   @unique @map("role_code") // SUPER_ADMIN, ADMIN, CMS_USER, SURVEYOR, BENEFICIARY
+  roleName    String   @map("role_name")
+  description String?  @map("description")
+  isActive    Boolean  @default(true) @map("is_active")
+  isDeleted   Boolean  @default(false) @map("is_deleted")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users User[]
+
+  @@map("master_roles")
+}
+
+model MasterRelation {
+  id           String   @id @default(uuid()) @map("id")
+  relationCode String   @unique @map("relation_code")
+  relationName String   @map("relation_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  isDeleted    Boolean  @default(false) @map("is_deleted")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  familyMembers BeneficiaryFamilyMember[]
+
+  @@map("master_relations")
+}
+
+model MasterQualification {
+  id                String   @id @default(uuid()) @map("id")
+  qualificationCode String   @unique @map("qualification_code")
+  qualificationName String   @map("qualification_name")
+  isActive          Boolean  @default(true) @map("is_active")
+  isDeleted         Boolean  @default(false) @map("is_deleted")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  userQualifications BeneficiaryQualification[]
+
+  @@map("master_qualifications")
+}
+
+model MasterSocialCategory {
+  id           String   @id @default(uuid()) @map("id")
+  categoryCode String   @unique @map("category_code")
+  categoryName String   @map("category_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  isDeleted    Boolean  @default(false) @map("is_deleted")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  userDetails BeneficiaryDetail[]
+
+  @@map("master_social_categories")
+}
+
+// ----------------------------------------------------
+// CORE USER & AUTHENTICATION TABLE (ALL ROLES)
+// ----------------------------------------------------
+model User {
+  id               String           @id @default(uuid()) @map("id")
+  roleId           String           @map("role_id")
+  role             MasterRole       @relation(fields: [roleId], references: [id])
+  registrationType RegistrationType @default(DIRECT) @map("registration_type")
+  firstName        String           @map("first_name")
+  middleName       String?          @map("middle_name")
+  lastName         String           @map("last_name")
+  email            String?          @unique @map("email")
+  mobile           String           @unique @map("mobile")
+  gender           Gender           @map("gender")
+  passwordHash     String           @map("password_hash")
+  tfaCode          String?          @map("tfa_code")
+  tfaExpiresAt     DateTime?        @map("tfa_expires_at")
+  lastLoginAt      DateTime?        @map("last_login_at")
+  createdById      String?          @map("created_by_id")
+  createdBy        User?            @relation("SurveyorCreatedUsers", fields: [createdById], references: [id])
+  isActive         Boolean          @default(true) @map("is_active")
+  isDeleted        Boolean          @default(false) @map("is_deleted")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  beneficiaryDetail         BeneficiaryDetail?
+  beneficiaryAddresses      BeneficiaryAddress[]
+  beneficiaryQualifications BeneficiaryQualification[]
+  beneficiaryFamilyMembers  BeneficiaryFamilyMember[]
+  beneficiaryDocuments      BeneficiaryDocument[]
+  userLocations             UserLocation[]
+  createdUsers              User[]                     @relation("SurveyorCreatedUsers")
+
+  @@map("users")
+}
+
+// ----------------------------------------------------
+// ADMINISTRATIVE & SURVEYOR ZONAL LOCATION MAPPINGS
+// ----------------------------------------------------
+model UserLocation {
+  id         String          @id @default(uuid()) @map("id")
+  userId     String          @map("user_id")
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stateId    Int             @map("state_id")
+  state      MasterState     @relation(fields: [stateId], references: [id])
+  districtId Int?            @map("district_id")
+  district   MasterDistrict? @relation(fields: [districtId], references: [id])
+  blockId    Int?            @map("block_id")
+  block      MasterBlock?    @relation(fields: [blockId], references: [id])
+  isActive   Boolean         @default(true) @map("is_active")
+  isDeleted  Boolean         @default(false) @map("is_deleted")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+
+  @@map("user_locations")
+}
+
+// ----------------------------------------------------
+// EXTENDED BENEFICIARY PROFILE DETAILS
+// ----------------------------------------------------
+model BeneficiaryDetail {
+  id                String                @id @default(uuid()) @map("id")
+  userId            String                @unique @map("user_id")
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  surveyNumber      String?               @unique @map("survey_number") // System-generated 8-digit alphanumeric upon Admin Approval
+  applicationStatus ApplicationStatus     @default(DRAFT) @map("application_status")
+  dob               DateTime?             @map("dob")
+  fatherName        String                @map("father_name")
+  motherName        String                @map("mother_name")
+  spouseName        String?               @map("spouse_name")
+  socialCategoryId  String?               @map("social_category_id")
+  socialCategory    MasterSocialCategory? @relation(fields: [socialCategoryId], references: [id])
+  profilePhotoUrl   String?               @map("profile_photo_url")
+  isVerified        Boolean               @default(false) @map("is_verified")
+  verifiedById      String?               @map("verified_by_id")
+  verifiedAt        DateTime?             @map("verified_at")
+  rejectionReason   String?               @map("rejection_reason")
+  isActive          Boolean               @default(true) @map("is_active")
+  isDeleted         Boolean               @default(false) @map("is_deleted")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  @@map("beneficiary_details")
+}
+
+// ----------------------------------------------------
+// BENEFICIARY HOUSEHOLD ADDRESSES
+// ----------------------------------------------------
+model BeneficiaryAddress {
+  id             String          @id @default(uuid()) @map("id")
+  userId         String          @map("user_id")
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  houseNumber    String?         @map("house_number")
+  buildingName   String?         @map("building_name")
+  apartmentName  String?         @map("apartment_name")
+  streetLandmark String?         @map("street_landmark")
+  stateId        Int?            @map("state_id")
+  state          MasterState?    @relation(fields: [stateId], references: [id])
+  districtId     Int?            @map("district_id")
+  district       MasterDistrict? @relation(fields: [districtId], references: [id])
+  blockId        Int?            @map("block_id")
+  block          MasterBlock?    @relation(fields: [blockId], references: [id])
+  pincode        String?         @map("pincode")
+  isPrimary      Boolean         @default(true) @map("is_primary")
+  isActive       Boolean         @default(true) @map("is_active")
+  isDeleted      Boolean         @default(false) @map("is_deleted")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@map("beneficiary_addresses")
+}
+
+// ----------------------------------------------------
+// BENEFICIARY QUALIFICATIONS (MULTIPLE QUALIFICATIONS PER USER)
+// ----------------------------------------------------
+model BeneficiaryQualification {
+  id                String              @id @default(uuid()) @map("id")
+  userId            String              @map("user_id")
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  qualificationId   String              @map("qualification_id")
+  qualification     MasterQualification @relation(fields: [qualificationId], references: [id])
+  passingYear       Int?                @map("passing_year")
+  boardUniversity   String?             @map("board_university")
+  gradePercentage   String?             @map("grade_percentage")
+  certificateDocUrl String?             @map("certificate_doc_url")
+  isActive          Boolean             @default(true) @map("is_active")
+  isDeleted         Boolean             @default(false) @map("is_deleted")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  @@map("beneficiary_qualifications")
+}
+
+// ----------------------------------------------------
+// BENEFICIARY FAMILY MEMBERS (RATION CARD / HOUSEHOLD FAMILY MODEL)
+// ----------------------------------------------------
+model BeneficiaryFamilyMember {
+  id            String         @id @default(uuid()) @map("id")
+  headUserId    String         @map("head_user_id")
+  headUser      User           @relation(fields: [headUserId], references: [id], onDelete: Cascade)
+  firstName     String         @map("first_name")
+  middleName    String?        @map("middle_name")
+  lastName      String         @map("last_name")
+  relationId    String         @map("relation_id")
+  relation      MasterRelation @relation(fields: [relationId], references: [id])
+  gender        Gender         @map("gender")
+  dob           DateTime?      @map("dob")
+  age           Int?           @map("age")
+  idProofNumber String?        @map("id_proof_number")
+  idProofUrl    String?        @map("id_proof_url")
+  occupation    String?        @map("occupation")
+  isActive      Boolean        @default(true) @map("is_active")
+  isDeleted     Boolean        @default(false) @map("is_deleted")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  @@map("beneficiary_family_members")
+}
+
+// ----------------------------------------------------
+// BENEFICIARY DOCUMENT ATTACHMENTS (AUTO-INCREMENT INTEGER ID, FK TO MEDIA)
+// ----------------------------------------------------
+model BeneficiaryDocument {
+  id        Int      @id @default(autoincrement()) @map("id")
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  docType   DocType  @map("doc_type")
+  mediaId   Int      @map("media_id")
+  media     Media    @relation(fields: [mediaId], references: [id])
+  isActive  Boolean  @default(true) @map("is_active")
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, docType], name: "unique_user_doc_type")
+  @@map("beneficiary_documents")
+}

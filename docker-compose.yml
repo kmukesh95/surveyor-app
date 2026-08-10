@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: surveyor_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-surveyor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-surveyor_secret_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-surveyor_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-surveyor} -d ${POSTGRES_DB:-surveyor_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: surveyor_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: surveyor_backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://surveyor:surveyor_secret_pass@postgres:5432/surveyor_db?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-surveyor_jwt_access_secret_key_prod_2026}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-surveyor_jwt_refresh_secret_key_prod_2026}
+      JWT_ACCESS_EXPIRES_IN: "15m"
+      JWT_REFRESH_EXPIRES_IN: "7d"
+      PAYLOAD_ENCRYPTION_KEY: ${PAYLOAD_ENCRYPTION_KEY:-32_character_encryption_key_here}
+      ENABLE_PAYLOAD_ENCRYPTION: "false"
+      CORS_ORIGIN: "*"
+    ports:
+      - "5000:5000"
+    volumes:
+      - backend_uploads:/app/uploads
+    command: >
+      sh -c "npx prisma db push &&
+             node dist/server.js"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api/v1
+    container_name: surveyor_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_uploads:
