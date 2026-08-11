@@ -87,7 +87,6 @@ jobs:
     name: Continuous Deployment to AWS EC2
     needs: [backend-ci, frontend-ci]
     runs-on: ubuntu-latest
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
 
     steps:
       - name: Checkout Code
